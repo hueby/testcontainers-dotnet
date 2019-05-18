@@ -1,7 +1,9 @@
 ﻿using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Couchbase;
+using Couchbase.Authentication;
 using Couchbase.Configuration.Client;
 using TestContainers.Core.Builders;
 using TestContainers.Core.Containers;
@@ -14,6 +16,8 @@ namespace TestContainers.Tests.ContainerTests
     {
 
         public string ConnectionString => Container.ConnectionString;
+        public string UserName => Container.UserName;
+        public string Password => Container.Password;
 
         private CouchbaseContainer Container { get; }
 
@@ -21,8 +25,8 @@ namespace TestContainers.Tests.ContainerTests
         {
             Container = new DatabaseContainerBuilder<CouchbaseContainer>()
                 .Begin()
-                .WithImage("couchbase")
-                .WithExposedPorts(8091)
+                .WithImage(CouchbaseContainer.IMAGE)
+                .WithExposedPorts(CouchbaseContainer.COUCHBASE_PORT)
                 .WithEnv(("USERNAME", "admin"))
                 .WithEnv(("PASSWORD", "passwort1234"))
                 .Build();
@@ -36,30 +40,24 @@ namespace TestContainers.Tests.ContainerTests
     public class CouchbaseTests : IClassFixture<CouchbaseFixture>
 
     {
-        private readonly Cluster _cluster;
-
-        public CouchbaseTests(CouchbaseFixture fixture) => _cluster =
-            new Cluster(new ClientConfiguration {
+        public CouchbaseTests(CouchbaseFixture fixture)
+        {
+            var clientConfig = new ClientConfiguration
+            {
                 Servers = new List<Uri>
                 {
                     new Uri(fixture.ConnectionString)
-
                 }
-            });
+            };
+
+            var authenticator = new PasswordAuthenticator(fixture.UserName, fixture.Password);
+            ClusterHelper.Initialize(clientConfig, authenticator);
+        }
 
         [Fact]
-        public async Task SimpleTest()
+        public void SimpleTest()
         {
-            string query = "SELECT 1";
-            var createManager = this._cluster.CreateManager();
-            await createManager.CreateBucketAsync("Test");
-            var bucket = await this._cluster.OpenBucketAsync("Test");
-            await bucket.QueryAsync<dynamic>(query);
-
-            Assert.True(true);
-
-            this._cluster.CloseBucket(bucket);
-
+            Assert.True(ClusterHelper.Initialized);
         }
     }
 }
